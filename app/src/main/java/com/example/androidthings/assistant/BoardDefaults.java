@@ -107,6 +107,21 @@ public class BoardDefaults {
         }
     }
 
+
+    public static String getSpiBus() {
+        switch (getBoardVariant()) {
+            case DEVICE_EDISON_ARDUINO:
+                return "SPI1";
+            case DEVICE_EDISON:
+                return "SPI2";
+            case DEVICE_RPI3:
+                return "SPI0.0";
+            default:
+                throw new IllegalArgumentException("Unknown device: " + Build.DEVICE);
+        }
+    }
+
+
     private static String getBoardVariant() {
         if (!sBoardVariant.isEmpty()) {
             return sBoardVariant;
