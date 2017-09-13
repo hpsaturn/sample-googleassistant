@@ -37,6 +37,7 @@ import com.google.android.things.contrib.voicehat.VoiceHatDriver;
 import com.google.android.things.pio.Gpio;
 
 import com.google.android.things.pio.PeripheralManagerService;
+import com.google.android.things.pio.SpiDevice;
 import com.google.assistant.embedded.v1alpha1.AudioInConfig;
 import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
 import com.google.assistant.embedded.v1alpha1.ConverseConfig;
@@ -53,6 +54,14 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import admobilize.matrix.io.Everloop;
+import admobilize.matrix.io.Humidity;
+import admobilize.matrix.io.IMU;
+import admobilize.matrix.io.MicArray;
+import admobilize.matrix.io.MicArrayDriver;
+import admobilize.matrix.io.Pressure;
+import admobilize.matrix.io.UV;
+import admobilize.matrix.io.Wishbone;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
@@ -62,7 +71,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static final String TAG = AssistantActivity.class.getSimpleName();
 
     // Peripheral and drivers constants.
-    private static final boolean AUDIO_USE_I2S_VOICEHAT_IF_AVAILABLE = true;
+    private static final boolean AUDIO_USE_I2S_VOICEHAT_IF_AVAILABLE = false;
+    private static final boolean AUDIO_USE_MATRIX_CREATOR_IF_AVAILABLE = true;
     private static final int BUTTON_DEBOUNCE_DELAY_MS = 20;
 
     // Audio constants.
@@ -70,6 +80,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static final int SAMPLE_RATE = 16000;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     private static final int DEFAULT_VOLUME = 100;
+    private static final long INTERVAL_BUTTON_PRESSED = 10000;
 
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
@@ -169,6 +180,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         }
     };
 
+    // Button emulate Handler
+    private Handler mButtonEmulateHandler = new Handler();
+
     // Audio playback and recording objects.
     private AudioTrack mAudioTrack;
     private AudioRecord mAudioRecord;
@@ -215,6 +229,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Runnable mStreamAssistantRequest = new Runnable() {
         @Override
         public void run() {
+            Log.d(TAG, "mStreamAssistantRequest");
             ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
@@ -223,6 +238,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 return;
             }
             Log.d(TAG, "streaming ConverseRequest: " + result);
+            String data = "";
+            for (int x = 0; x < audioData.capacity(); x++) {
+                data = data + audioData.get(x);
+            }
+            Log.d(TAG, "[MIC] audioData data: " + data);
+
             mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
                     .build());
@@ -247,6 +268,11 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // List & adapter to store and display the history of Assistant Requests.
     private ArrayList<String> mAssistantRequests = new ArrayList<>();
     private ArrayAdapter<String> mAssistantRequestsAdapter;
+    private SpiDevice spiDevice;
+    private Wishbone wb;
+    private Everloop everloop;
+    private MicArray micArray;
+    private MicArrayDriver mMicArrayDriver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -284,6 +310,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     }
                 }
             }
+            if (AUDIO_USE_MATRIX_CREATOR_IF_AVAILABLE){
+                initMatrixCreatorDevices();
+            }
             mButton = new Button(BoardDefaults.getGPIOForButton(), Button.LogicState.PRESSED_WHEN_LOW);
             mButton.setDebounceDelay(BUTTON_DEBOUNCE_DELAY_MS);
             mButton.setOnButtonEventListener(this);
@@ -307,9 +336,10 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 .setBufferSizeInBytes(outputBufferSize)
                 .build();
         mAudioTrack.play();
-        int inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_STEREO.getSampleRate(),
-                AUDIO_FORMAT_STEREO.getChannelMask(),
-                AUDIO_FORMAT_STEREO.getEncoding());
+        int inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_IN_MONO.getSampleRate(),
+                AUDIO_FORMAT_IN_MONO.getChannelMask(),
+                AUDIO_FORMAT_IN_MONO.getEncoding());
+        Log.i(TAG,"inputBufferSize="+inputBufferSize);
         mAudioRecord = new AudioRecord.Builder()
                 .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(AUDIO_FORMAT_IN_MONO)
@@ -332,6 +362,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
+//        mButtonEmulateHandler.post(mButtonEmulateRunnable);
+        mAssistantHandler.post(mStartAssistantRequest);
     }
 
     @Override
@@ -383,8 +415,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mVoiceHat.unregisterAudioOutputDriver();
                 mVoiceHat.unregisterAudioInputDriver();
                 mVoiceHat.close();
+                mMicArrayDriver.unregisterAudioInputDriver();
+                mMicArrayDriver.close();
             } catch (IOException e) {
                 Log.w(TAG, "error closing voice hat driver", e);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
             mVoiceHat = null;
         }
@@ -396,4 +432,70 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         });
         mAssistantThread.quitSafely();
     }
+
+    private void initMatrixCreatorDevices(){
+        PeripheralManagerService service = new PeripheralManagerService();
+        while(!configSPI(service)){
+            Log.i(TAG, "waiting for SPI..");
+        }
+        wb=new Wishbone(spiDevice);
+        initDevices(service);
+    }
+
+    private boolean configSPI(PeripheralManagerService service){
+        try {
+            List<String> deviceList = service.getSpiBusList();
+            if (deviceList.isEmpty()) {
+                Log.i(TAG, "No SPI bus available");
+            } else {
+                Log.i(TAG, "List of available devices: " + deviceList);
+                spiDevice = service.openSpiDevice(BoardDefaults.getSpiBus());
+                spiDevice.setMode(SpiDevice.MODE3);
+                spiDevice.setFrequency(18000000);     // 18MHz
+                spiDevice.setBitsPerWord(8);          // 8 BP
+                spiDevice.setBitJustification(false); // MSB first
+                return true;
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error on PeripheralIO API (SPI)..");
+        }
+
+        return false;
+    }
+
+    private void initDevices(PeripheralManagerService service) {
+//        pressure = new Pressure(wb);
+//        humidity = new Humidity(wb);
+//        imuSensor = new IMU(wb);
+//        uvSensor = new UV(wb);
+
+        // TODO: autodetection of hat via SPI register
+        everloop = new Everloop(wb); // NOTE: please change to right board
+        everloop.clear();
+        everloop.write();
+
+        micArray = new MicArray(wb);
+//        int samples = 2;
+//        if(ENABLE_MICARRAY_RECORD) samples=1024;
+//        micArray.capture(7, samples, ENABLE_CONTINOUNS_CAPTURE, onMicArrayListener);
+        mMicArrayDriver = new MicArrayDriver(micArray);
+        mMicArrayDriver.registerAudioInputDriver();
+    }
+
+    private boolean BUTTON_TOOGLE;
+    private Runnable mButtonEmulateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if(!BUTTON_TOOGLE){
+                Log.d(TAG,"[MIC] mButtonEmulate [PRESSED]");
+                mAssistantHandler.post(mStartAssistantRequest);
+            }else{
+                Log.d(TAG,"[MIC] mButtonEmulate [RELEASED]");
+                mAssistantHandler.post(mStopAssistantRequest);
+            }
+            BUTTON_TOOGLE=!BUTTON_TOOGLE;
+            mButtonEmulateHandler.postDelayed(mButtonEmulateRunnable,INTERVAL_BUTTON_PRESSED);
+
+        }
+    };
 }
