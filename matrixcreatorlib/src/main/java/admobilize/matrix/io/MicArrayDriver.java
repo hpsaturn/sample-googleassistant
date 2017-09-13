@@ -60,7 +60,7 @@ public class MicArrayDriver implements AutoCloseable {
     private HandlerThread mAssistantThread;
     private Handler mAssistantHandler;
 
-    public MicArrayDriver(MicArray micArray) {
+    public MicArrayDriver(MicArray micArray, AudioFormat audioFormatInMono) {
         this.micArray=micArray;
     }
 

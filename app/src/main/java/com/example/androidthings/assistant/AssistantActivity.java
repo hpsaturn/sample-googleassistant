@@ -80,7 +80,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static final int SAMPLE_RATE = 16000;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     private static final int DEFAULT_VOLUME = 100;
-    private static final long INTERVAL_BUTTON_PRESSED = 10000;
+    private static final long INTERVAL_BUTTON_PRESSED = 4000;
 
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
@@ -230,7 +230,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         @Override
         public void run() {
             Log.d(TAG, "mStreamAssistantRequest");
-            ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
+            ByteBuffer audioData = ByteBuffer.allocateDirect(inputBufferSize);
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
             if (result < 0) {
@@ -273,6 +273,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Everloop everloop;
     private MicArray micArray;
     private MicArrayDriver mMicArrayDriver;
+    private int inputBufferSize;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -336,7 +337,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 .setBufferSizeInBytes(outputBufferSize)
                 .build();
         mAudioTrack.play();
-        int inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_IN_MONO.getSampleRate(),
+        inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_IN_MONO.getSampleRate(),
                 AUDIO_FORMAT_IN_MONO.getChannelMask(),
                 AUDIO_FORMAT_IN_MONO.getEncoding());
         Log.i(TAG,"inputBufferSize="+inputBufferSize);
@@ -362,8 +363,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
-//        mButtonEmulateHandler.post(mButtonEmulateRunnable);
-        mAssistantHandler.post(mStartAssistantRequest);
+        mButtonEmulateHandler.post(mButtonEmulateRunnable);
+//        mAssistantHandler.post(mStartAssistantRequest);
     }
 
     @Override
@@ -474,24 +475,24 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         everloop.clear();
         everloop.write();
 
-        micArray = new MicArray(wb);
-//        int samples = 2;
-//        if(ENABLE_MICARRAY_RECORD) samples=1024;
-//        micArray.capture(7, samples, ENABLE_CONTINOUNS_CAPTURE, onMicArrayListener);
-        mMicArrayDriver = new MicArrayDriver(micArray);
+        micArray = new MicArray(wb,inputBufferSize);
+        mMicArrayDriver = new MicArrayDriver(micArray,AUDIO_FORMAT_IN_MONO);
         mMicArrayDriver.registerAudioInputDriver();
     }
 
     private boolean BUTTON_TOOGLE;
+    private boolean release;
     private Runnable mButtonEmulateRunnable = new Runnable() {
         @Override
         public void run() {
+            if(release)return;
             if(!BUTTON_TOOGLE){
                 Log.d(TAG,"[MIC] mButtonEmulate [PRESSED]");
                 mAssistantHandler.post(mStartAssistantRequest);
             }else{
                 Log.d(TAG,"[MIC] mButtonEmulate [RELEASED]");
                 mAssistantHandler.post(mStopAssistantRequest);
+                release=true;
             }
             BUTTON_TOOGLE=!BUTTON_TOOGLE;
             mButtonEmulateHandler.postDelayed(mButtonEmulateRunnable,INTERVAL_BUTTON_PRESSED);
