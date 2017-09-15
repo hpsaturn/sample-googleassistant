@@ -34,7 +34,7 @@ public class MicArray extends SensorBase {
     private boolean inRead;
 
     private byte[] data = new byte[128*8*2];
-    private ArrayDeque<Short> mic0 = new ArrayDeque<>();
+    private ArrayDeque<Byte> mic0 = new ArrayDeque<>();
     private ArrayDeque<Short> mic1 = new ArrayDeque<>();
     private ArrayDeque<Short> mic2 = new ArrayDeque<>();
     private ArrayDeque<Short> mic3 = new ArrayDeque<>();
@@ -110,18 +110,19 @@ public class MicArray extends SensorBase {
         if(inRead==false) {
             inRead = true;
             wb.SpiReadBurst((short) kMicrophoneArrayBaseAddress, data, 128 * 8 * 2);
-//            appendData();
+            appendData();
             inRead = false;
         }else
             Log.w(TAG,"[MIC] skip read data!");
     }
 
     public int read(ByteBuffer byteBuffer, int i) throws IOException {
-        if(!inRead&&data.length>0){
-            for (int j=0;j<128;j++){
-                byteBuffer.put(j, ByteBuffer.wrap(data,(j*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).get());
-            }
-        }
+        ArrayDeque<Byte> micData = mic0.clone();
+        byte[] audioData = new byte[i];
+        Iterator<Byte> it = micData.iterator();
+        int x=0;
+        while(it.hasNext())audioData[x++]=it.next();
+        byteBuffer.wrap(audioData,0,i);
 
 //        String data = "";
 //        for (int x=0;x<byteBuffer.capacity();x++){
@@ -135,18 +136,17 @@ public class MicArray extends SensorBase {
 
     private void appendData(){
         for (int i=0;i<128;i++){
-            if(mic0.size()==128){
-                Iterator<ArrayDeque> it = micarray.iterator();
-                while (it.hasNext())it.next().poll();
+            if(mic0.size()==640){
+                mic0.poll();
             }
-            mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic1.add(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic2.add(ByteBuffer.wrap(data,(i*8+2)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic3.add(ByteBuffer.wrap(data,(i*8+3)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic4.add(ByteBuffer.wrap(data,(i*8+4)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic5.add(ByteBuffer.wrap(data,(i*8+5)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic6.add(ByteBuffer.wrap(data,(i*8+6)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
-            mic7.add(ByteBuffer.wrap(data,(i*8+7)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+            mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).get());
+//            mic1.add(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+//            mic2.add(ByteBuffer.wrap(data,(i*8+2)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+//            mic3.add(ByteBuffer.wrap(data,(i*8+3)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+//            mic4.add(ByteBuffer.wrap(data,(i*8+4)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+//            mic5.add(ByteBuffer.wrap(data,(i*8+5)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+//            mic6.add(ByteBuffer.wrap(data,(i*8+6)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+//            mic7.add(ByteBuffer.wrap(data,(i*8+7)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
         }
     }
 

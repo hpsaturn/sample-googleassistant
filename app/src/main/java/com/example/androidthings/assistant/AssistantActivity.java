@@ -103,7 +103,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     .setEncoding(ENCODING)
                     .setSampleRate(SAMPLE_RATE)
                     .build();
-    private static final int SAMPLE_BLOCK_SIZE = 1024;
+    private static final int SAMPLE_BLOCK_SIZE = 640;
 
     // Google Assistant API constants.
     private static final String ASSISTANT_ENDPOINT = "embeddedassistant.googleapis.com";
