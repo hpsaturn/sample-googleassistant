@@ -29,9 +29,6 @@ public class MicArray extends SensorBase {
     private static final boolean DEBUG = Config.DEBUG;
     private final int inputBufferSize;
 
-    private int current_mic =0;
-    private int max_irq_samples;
-    private int irq_samples;
     private boolean inRead;
 
     private byte[] data = new byte[128*8*2];
@@ -46,7 +43,6 @@ public class MicArray extends SensorBase {
 
     private ArrayList<ArrayDeque> micarray=new ArrayList<>();
     private Gpio gpio;
-    private boolean continuous;
 
     public MicArray(Wishbone wb, int inputBufferSize) {
         super(wb);
@@ -129,17 +125,16 @@ public class MicArray extends SensorBase {
     }
 
     public int read(ByteBuffer byteBuffer, int i) throws IOException {
-         byteBuffer.put(mic0.getLast());
-//        Iterator<Byte> it = mic0.iterator();
-//        while(it.hasNext())byteBuffer.put(byteBuffer.position(),it.next());
-//
-//        String data = "";
-//        for (int x=0;x<byteBuffer.capacity();x++){
-//            data=data+byteBuffer.get(x);
-//        }
-//        Log.d(TAG, "[MIC] byteBuffer data: "+data);
+        Log.d(TAG, "[MIC] mic read for buffer size: i");
+        Iterator<Byte> it = mic0.iterator();
+        while(it.hasNext())byteBuffer.put(it.next());
 
-//        Log.w(TAG,"[MIC] ByteBuffer, pos: "+i+" "+byteBuffer.capacity());
+        String data = "";
+        for (int x=0;x<byteBuffer.capacity();x++){
+            data=data+byteBuffer.get(x);
+        }
+        Log.d(TAG, "[MIC] byteBuffer data: "+data);
+
         return 0;
     }
 

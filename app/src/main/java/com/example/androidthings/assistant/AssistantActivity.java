@@ -230,7 +230,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         @Override
         public void run() {
             Log.d(TAG, "mStreamAssistantRequest");
-            ByteBuffer audioData = ByteBuffer.allocateDirect(inputBufferSize);
+            ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
             if (result < 0) {
@@ -274,6 +274,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private MicArray micArray;
     private MicArrayDriver mMicArrayDriver;
     private int inputBufferSize;
+    private Pressure pressure;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -363,8 +364,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
-        mButtonEmulateHandler.post(mButtonEmulateRunnable);
-//        mAssistantHandler.post(mStartAssistantRequest);
+//        mButtonEmulateHandler.post(mButtonEmulateRunnable);
+        mAssistantHandler.post(mStartAssistantRequest);
     }
 
     @Override
@@ -465,7 +466,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     }
 
     private void initDevices(PeripheralManagerService service) {
-//        pressure = new Pressure(wb);
+        pressure = new Pressure(wb);
 //        humidity = new Humidity(wb);
 //        imuSensor = new IMU(wb);
 //        uvSensor = new UV(wb);
@@ -473,10 +474,17 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         // TODO: autodetection of hat via SPI register
         everloop = new Everloop(wb); // NOTE: please change to right board
         everloop.clear();
+        for(int i=0;i<everloop.getLedcount();i++) {
+            everloop.drawProgress(i);
+            everloop.write();
+        }
+        everloop.clear();
         everloop.write();
+        pressure.read();
+        Log.d(TAG,"pressure: "+pressure.getPressure());
 
         micArray = new MicArray(wb,inputBufferSize);
-        mMicArrayDriver = new MicArrayDriver(micArray,AUDIO_FORMAT_IN_MONO);
+        mMicArrayDriver = new MicArrayDriver(micArray,inputBufferSize,AUDIO_FORMAT_IN_MONO);
         mMicArrayDriver.registerAudioInputDriver();
     }
 

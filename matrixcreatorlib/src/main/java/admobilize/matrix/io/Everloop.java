@@ -12,6 +12,11 @@ public class Everloop extends SensorBase {
 
     public ArrayList<LedValue> ledImage = new ArrayList<>();
     private boolean toggleColor;
+
+    public int getLedcount() {
+        return led_count;
+    }
+
     private int led_count=35;
 
     public Everloop(Wishbone wb) {
