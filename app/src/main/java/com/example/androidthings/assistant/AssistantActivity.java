@@ -80,7 +80,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static final int SAMPLE_RATE = 16000;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     private static final int DEFAULT_VOLUME = 100;
-    private static final long INTERVAL_BUTTON_PRESSED = 10000;
+    private static final long INTERVAL_BUTTON_PRESSED = 3000;
 
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
@@ -103,7 +103,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     .setEncoding(ENCODING)
                     .setSampleRate(SAMPLE_RATE)
                     .build();
-    private static final int SAMPLE_BLOCK_SIZE = 640;
+    private static final int SAMPLE_BLOCK_SIZE = 1024;
 
     // Google Assistant API constants.
     private static final String ASSISTANT_ENDPOINT = "embeddedassistant.googleapis.com";
@@ -343,7 +343,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         mAudioRecord = new AudioRecord.Builder()
                 .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(AUDIO_FORMAT_IN_MONO)
-                .setBufferSizeInBytes(inputBufferSize)
+                .setBufferSizeInBytes(128)
                 .build();
         // Set volume from preferences
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
@@ -362,8 +362,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
-//        mButtonEmulateHandler.post(mButtonEmulateRunnable);
-        mAssistantHandler.post(mStartAssistantRequest);
+        mButtonEmulateHandler.post(mButtonEmulateRunnable);
+//        mAssistantHandler.post(mStartAssistantRequest);
     }
 
     @Override
@@ -483,15 +483,18 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     }
 
     private boolean BUTTON_TOOGLE;
+    private boolean pressed;
     private Runnable mButtonEmulateRunnable = new Runnable() {
         @Override
         public void run() {
+            if(pressed)return;
             if(!BUTTON_TOOGLE){
                 Log.d(TAG,"[MIC] mButtonEmulate [PRESSED]");
                 mAssistantHandler.post(mStartAssistantRequest);
             }else{
                 Log.d(TAG,"[MIC] mButtonEmulate [RELEASED]");
                 mAssistantHandler.post(mStopAssistantRequest);
+                pressed=true;
             }
             BUTTON_TOOGLE=!BUTTON_TOOGLE;
             mButtonEmulateHandler.postDelayed(mButtonEmulateRunnable,INTERVAL_BUTTON_PRESSED);

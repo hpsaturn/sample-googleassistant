@@ -27,6 +27,7 @@ public class MicArray extends SensorBase {
 
     private static final String TAG = MicArray.class.getSimpleName();
     private static final boolean DEBUG = Config.DEBUG;
+    private final ByteBuffer buffer;
 
     private int current_mic =0;
     private int max_irq_samples;
@@ -47,6 +48,7 @@ public class MicArray extends SensorBase {
     private Gpio gpio;
     private OnMicArrayListener listener;
     private boolean continuous;
+    private boolean isBufferReady;
 
     public MicArray(Wishbone wb) {
         super(wb);
@@ -69,6 +71,7 @@ public class MicArray extends SensorBase {
             micarray.add(mic6);
             micarray.add(mic7);
         }
+        buffer=ByteBuffer.allocateDirect(640);
         configMicDataInterrupt();
     }
 
@@ -110,33 +113,36 @@ public class MicArray extends SensorBase {
         if(inRead==false) {
             inRead = true;
             wb.SpiReadBurst((short) kMicrophoneArrayBaseAddress, data, 128 * 8 * 2);
-            appendData();
             inRead = false;
+//            appendData();
         }else
             Log.w(TAG,"[MIC] skip read data!");
     }
 
     public int read(ByteBuffer byteBuffer, int i) throws IOException {
-        ArrayDeque<Byte> micData = mic0.clone();
-        byte[] audioData = new byte[i];
-        Iterator<Byte> it = micData.iterator();
-        int x=0;
-        while(it.hasNext())audioData[x++]=it.next();
-        byteBuffer.wrap(audioData,0,i);
-
+        if(!inRead) {
+            for(int x=0;x<128;x++){
+                byteBuffer.putChar(ByteBuffer.wrap(data,(x*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).getChar());
+            }
+            inRead=false;
+            return 256;
+        }
 //        String data = "";
 //        for (int x=0;x<byteBuffer.capacity();x++){
 //            data=data+byteBuffer.get(x);
 //        }
 //        Log.d(TAG, "[MIC] byteBuffer data: "+data);
 
-//        Log.w(TAG,"[MIC] ByteBuffer, pos: "+i+" "+byteBuffer.capacity());
         return 0;
     }
 
     private void appendData(){
         for (int i=0;i<128;i++){
             if(mic0.size()==640){
+                isBufferReady=false;
+                buffer.clear();
+                for (Byte aMic0 : mic0) buffer.put(aMic0);
+                isBufferReady=true;
                 mic0.poll();
             }
             mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).get());
