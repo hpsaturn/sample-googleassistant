@@ -35,7 +35,6 @@ import android.widget.ListView;
 import com.google.android.things.contrib.driver.button.Button;
 import com.google.android.things.contrib.voicehat.VoiceHatDriver;
 import com.google.android.things.pio.Gpio;
-
 import com.google.android.things.pio.PeripheralManagerService;
 import com.google.android.things.pio.SpiDevice;
 import com.google.assistant.embedded.v1alpha1.AudioInConfig;
@@ -55,12 +54,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import admobilize.matrix.io.Everloop;
-import admobilize.matrix.io.Humidity;
-import admobilize.matrix.io.IMU;
 import admobilize.matrix.io.MicArray;
 import admobilize.matrix.io.MicArrayDriver;
-import admobilize.matrix.io.Pressure;
-import admobilize.matrix.io.UV;
 import admobilize.matrix.io.Wishbone;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -80,10 +75,12 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static final int SAMPLE_RATE = 16000;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
     private static final int DEFAULT_VOLUME = 100;
-    private static final long INTERVAL_BUTTON_PRESSED = 4000;
+    private static final long INTERVAL_BUTTON_PRESSED = 3000;
 
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
+
+    public static final int SAMPLE_BLOCK_SIZE = 128;
 
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
@@ -103,7 +100,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     .setEncoding(ENCODING)
                     .setSampleRate(SAMPLE_RATE)
                     .build();
-    private static final int SAMPLE_BLOCK_SIZE = 1024;
 
     // Google Assistant API constants.
     private static final String ASSISTANT_ENDPOINT = "embeddedassistant.googleapis.com";
@@ -226,24 +222,17 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
+
     private Runnable mStreamAssistantRequest = new Runnable() {
         @Override
         public void run() {
-            Log.d(TAG, "mStreamAssistantRequest");
-            ByteBuffer audioData = ByteBuffer.allocateDirect(inputBufferSize);
+            ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
             if (result < 0) {
                 Log.e(TAG, "error reading from audio stream:" + result);
                 return;
             }
-            Log.d(TAG, "streaming ConverseRequest: " + result);
-            String data = "";
-            for (int x = 0; x < audioData.capacity(); x++) {
-                data = data + audioData.get(x);
-            }
-            Log.d(TAG, "[MIC] audioData data: " + data);
-
             mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
                     .build());
@@ -261,6 +250,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             mAudioRecord.stop();
             mAudioTrack.play();
+//            new sendData().execute();
         }
     };
     private Handler mMainHandler;
@@ -273,7 +263,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Everloop everloop;
     private MicArray micArray;
     private MicArrayDriver mMicArrayDriver;
-    private int inputBufferSize;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -337,14 +326,14 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 .setBufferSizeInBytes(outputBufferSize)
                 .build();
         mAudioTrack.play();
-        inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_IN_MONO.getSampleRate(),
+        int inputBufferSize = AudioRecord.getMinBufferSize(AUDIO_FORMAT_IN_MONO.getSampleRate(),
                 AUDIO_FORMAT_IN_MONO.getChannelMask(),
                 AUDIO_FORMAT_IN_MONO.getEncoding());
         Log.i(TAG,"inputBufferSize="+inputBufferSize);
         mAudioRecord = new AudioRecord.Builder()
                 .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(AUDIO_FORMAT_IN_MONO)
-                .setBufferSizeInBytes(inputBufferSize)
+                .setBufferSizeInBytes(SAMPLE_BLOCK_SIZE)
                 .build();
         // Set volume from preferences
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
@@ -363,8 +352,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
+        // TODO: implement wakeword like Kitt.ai or sensory
         mButtonEmulateHandler.post(mButtonEmulateRunnable);
-//        mAssistantHandler.post(mStartAssistantRequest);
     }
 
     @Override
@@ -465,38 +454,36 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     }
 
     private void initDevices(PeripheralManagerService service) {
-//        pressure = new Pressure(wb);
-//        humidity = new Humidity(wb);
-//        imuSensor = new IMU(wb);
-//        uvSensor = new UV(wb);
-
         // TODO: autodetection of hat via SPI register
         everloop = new Everloop(wb); // NOTE: please change to right board
         everloop.clear();
-        everloop.write();
 
-        micArray = new MicArray(wb,inputBufferSize);
-        mMicArrayDriver = new MicArrayDriver(micArray,AUDIO_FORMAT_IN_MONO);
+        for(int i=0;i<everloop.getLedCount();i=i+2) {
+            everloop.drawProgress(i);
+            everloop.write();
+        }
+
+        micArray = new MicArray(wb);
+        mMicArrayDriver = new MicArrayDriver(micArray);
         mMicArrayDriver.registerAudioInputDriver();
     }
 
     private boolean BUTTON_TOOGLE;
-    private boolean release;
+    private boolean pressed;
     private Runnable mButtonEmulateRunnable = new Runnable() {
         @Override
         public void run() {
-            if(release)return;
+            if(pressed)return;
             if(!BUTTON_TOOGLE){
                 Log.d(TAG,"[MIC] mButtonEmulate [PRESSED]");
                 mAssistantHandler.post(mStartAssistantRequest);
             }else{
                 Log.d(TAG,"[MIC] mButtonEmulate [RELEASED]");
                 mAssistantHandler.post(mStopAssistantRequest);
-                release=true;
+                pressed=true;
             }
             BUTTON_TOOGLE=!BUTTON_TOOGLE;
             mButtonEmulateHandler.postDelayed(mButtonEmulateRunnable,INTERVAL_BUTTON_PRESSED);
-
         }
     };
 }

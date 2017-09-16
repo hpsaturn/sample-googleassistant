@@ -139,6 +139,10 @@ public class Everloop extends SensorBase {
         }
     }
 
+    public int getLedCount() {
+        return led_count;
+    }
+
     public static class LedValue {
 
         public byte red;
