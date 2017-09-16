@@ -24,6 +24,7 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -49,9 +50,15 @@ import com.google.protobuf.ByteString;
 
 import org.json.JSONException;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import admobilize.matrix.io.Everloop;
@@ -85,6 +92,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
 
+    ArrayDeque<Byte> mic0 = new ArrayDeque<>();
+
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
                     .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
@@ -103,7 +112,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     .setEncoding(ENCODING)
                     .setSampleRate(SAMPLE_RATE)
                     .build();
-    private static final int SAMPLE_BLOCK_SIZE = 1024;
+    public static final int SAMPLE_BLOCK_SIZE = 128;
 
     // Google Assistant API constants.
     private static final String ASSISTANT_ENDPOINT = "embeddedassistant.googleapis.com";
@@ -229,20 +238,23 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private Runnable mStreamAssistantRequest = new Runnable() {
         @Override
         public void run() {
-            Log.d(TAG, "mStreamAssistantRequest");
+//            Log.d(TAG, "mStreamAssistantRequest");
             ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
             if (result < 0) {
                 Log.e(TAG, "error reading from audio stream:" + result);
                 return;
+            }else{
+//                Log.d(TAG, "result:" + result);
             }
-            Log.d(TAG, "streaming ConverseRequest: " + result);
-            String data = "";
+//            Log.d(TAG, "streaming ConverseRequest: " + result);
+//            String data = "";
             for (int x = 0; x < audioData.capacity(); x++) {
-                data = data + audioData.get(x);
+//                data = data+ "," + audioData.get(x);
+                mic0.add(audioData.get(x));
             }
-            Log.d(TAG, "[MIC] audioData data: " + data);
+//            Log.d(TAG, "[MIC] audioData data: " + data);
 
             mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
@@ -261,6 +273,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             mAudioRecord.stop();
             mAudioTrack.play();
+//            new sendData().execute();
         }
     };
     private Handler mMainHandler;
@@ -343,7 +356,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         mAudioRecord = new AudioRecord.Builder()
                 .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(AUDIO_FORMAT_IN_MONO)
-                .setBufferSizeInBytes(128)
+                .setBufferSizeInBytes(SAMPLE_BLOCK_SIZE)
                 .build();
         // Set volume from preferences
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
@@ -472,7 +485,11 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         // TODO: autodetection of hat via SPI register
         everloop = new Everloop(wb); // NOTE: please change to right board
         everloop.clear();
-        everloop.write();
+
+        for(int i=0;i<everloop.getLedCount();i=i+2) {
+            everloop.drawProgress(i);
+            everloop.write();
+        }
 
         micArray = new MicArray(wb);
 //        int samples = 2;
@@ -501,4 +518,48 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
         }
     };
+
+    private class sendData extends AsyncTask<Void,Void,Void> {
+        @Override
+        protected Void doInBackground(Void... voids) {
+            writeViaSocket();
+            return null;
+        }
+    }
+
+    private void writeViaSocket(){
+        Log.i(TAG, "[MIC] write via socket..");
+        Socket socket = null;
+        DataOutputStream dataOutputStream = null;
+        DataInputStream dataInputStream = null;
+
+        try {
+            socket = new Socket("10.0.0.140", 2999);
+            dataOutputStream = new DataOutputStream(socket.getOutputStream());
+            dataInputStream = new DataInputStream(socket.getInputStream());
+            for (Byte aMic0 : mic0) dataOutputStream.writeByte(aMic0);
+        } catch (IOException e) {
+            Log.e(TAG, "[MIC] sending mic data error! "+e.getMessage());
+            e.printStackTrace();
+        }
+        finally{
+            if (socket != null){
+                try { socket.close(); } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (dataOutputStream != null){
+                try { dataOutputStream.close(); } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (dataInputStream != null){
+                try { dataInputStream.close(); } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+
 }

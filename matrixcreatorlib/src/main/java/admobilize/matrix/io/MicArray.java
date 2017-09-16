@@ -35,7 +35,7 @@ public class MicArray extends SensorBase {
     private boolean inRead;
 
     private byte[] data = new byte[128*8*2];
-    private ArrayDeque<Byte> mic0 = new ArrayDeque<>();
+    private ArrayDeque<Short> mic0 = new ArrayDeque<>();
     private ArrayDeque<Short> mic1 = new ArrayDeque<>();
     private ArrayDeque<Short> mic2 = new ArrayDeque<>();
     private ArrayDeque<Short> mic3 = new ArrayDeque<>();
@@ -49,6 +49,7 @@ public class MicArray extends SensorBase {
     private OnMicArrayListener listener;
     private boolean continuous;
     private boolean isBufferReady;
+    private boolean isReadyData;
 
     public MicArray(Wishbone wb) {
         super(wb);
@@ -71,7 +72,7 @@ public class MicArray extends SensorBase {
             micarray.add(mic6);
             micarray.add(mic7);
         }
-        buffer=ByteBuffer.allocateDirect(640);
+        buffer=ByteBuffer.allocateDirect(2048);
         configMicDataInterrupt();
     }
 
@@ -113,39 +114,37 @@ public class MicArray extends SensorBase {
         if(inRead==false) {
             inRead = true;
             wb.SpiReadBurst((short) kMicrophoneArrayBaseAddress, data, 128 * 8 * 2);
+            appendData();
             inRead = false;
-//            appendData();
         }else
             Log.w(TAG,"[MIC] skip read data!");
     }
 
     public int read(ByteBuffer byteBuffer, int i) throws IOException {
-        if(!inRead) {
-            for(int x=0;x<128;x++){
-                byteBuffer.putChar(ByteBuffer.wrap(data,(x*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).getChar());
+        if(isReadyData) {
+            int oldpos = byteBuffer.position();
+            for (int x = 0; x < (i / 2); x++) {
+                byteBuffer.putShort(mic0.poll());
             }
-            inRead=false;
-            return 256;
+            int newpos = byteBuffer.position();
+            Log.d(TAG, "[MIC] byteBuffer bytes read: "+(newpos-oldpos));
+            return newpos - oldpos;
         }
 //        String data = "";
 //        for (int x=0;x<byteBuffer.capacity();x++){
 //            data=data+byteBuffer.get(x);
 //        }
 //        Log.d(TAG, "[MIC] byteBuffer data: "+data);
-
         return 0;
+
     }
 
     private void appendData(){
+        isReadyData=false;
         for (int i=0;i<128;i++){
-            if(mic0.size()==640){
-                isBufferReady=false;
-                buffer.clear();
-                for (Byte aMic0 : mic0) buffer.put(aMic0);
-                isBufferReady=true;
-                mic0.poll();
-            }
-            mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).get());
+//            Log.d(TAG,"position: "+buffer.position());
+//            buffer.putShort(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+            mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic1.add(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic2.add(ByteBuffer.wrap(data,(i*8+2)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic3.add(ByteBuffer.wrap(data,(i*8+3)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
@@ -154,7 +153,9 @@ public class MicArray extends SensorBase {
 //            mic6.add(ByteBuffer.wrap(data,(i*8+6)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic7.add(ByteBuffer.wrap(data,(i*8+7)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
         }
+        isReadyData=true;
     }
+
 
 
 }
