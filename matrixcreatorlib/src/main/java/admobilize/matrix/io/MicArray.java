@@ -105,7 +105,7 @@ public class MicArray extends SensorBase {
                 byteBuffer.putShort(mic0.poll());
             }
             int newpos = byteBuffer.position();
-            Log.d(TAG, "[MIC] byteBuffer bytes read: "+(newpos-oldpos));
+//            Log.d(TAG, "[MIC] byteBuffer bytes read: "+(newpos-oldpos));
             return newpos - oldpos;
         }
         return 0;

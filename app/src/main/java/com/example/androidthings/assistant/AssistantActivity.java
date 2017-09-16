@@ -80,7 +80,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
 
-    public static final int SAMPLE_BLOCK_SIZE = 128;
+    public static final int SAMPLE_BLOCK_SIZE = 1024;
 
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
