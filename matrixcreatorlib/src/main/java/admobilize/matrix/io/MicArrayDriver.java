@@ -34,8 +34,6 @@ public class MicArrayDriver implements AutoCloseable {
     private static final int SAMPLE_BLOCK_SIZE = 128;
 
     private MicArray micArray;
-    private I2sDevice mDevice;
-    private Gpio mTriggerGpio;
     private AudioInputUserDriver mAudioInputDriver;
 
     // Audio constants.
@@ -57,8 +55,6 @@ public class MicArrayDriver implements AutoCloseable {
                     .setEncoding(ENCODING)
                     .setSampleRate(SAMPLE_RATE)
                     .build();
-    private HandlerThread mAssistantThread;
-    private Handler mAssistantHandler;
 
     public MicArrayDriver(MicArray micArray) {
         this.micArray=micArray;

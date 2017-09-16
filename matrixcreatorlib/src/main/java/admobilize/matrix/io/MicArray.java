@@ -1,23 +1,16 @@
 package admobilize.matrix.io;
 
-import android.os.AsyncTask;
 import android.util.Log;
 
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.GpioCallback;
 import com.google.android.things.pio.PeripheralManagerService;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.Socket;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Iterator;
-
 
 /**
  * Created by Antonio Vanegas @hpsaturn on 12/20/16.
@@ -27,11 +20,6 @@ public class MicArray extends SensorBase {
 
     private static final String TAG = MicArray.class.getSimpleName();
     private static final boolean DEBUG = Config.DEBUG;
-    private final ByteBuffer buffer;
-
-    private int current_mic =0;
-    private int max_irq_samples;
-    private int irq_samples;
     private boolean inRead;
 
     private byte[] data = new byte[128*8*2];
@@ -46,9 +34,6 @@ public class MicArray extends SensorBase {
 
     private ArrayList<ArrayDeque> micarray=new ArrayList<>();
     private Gpio gpio;
-    private OnMicArrayListener listener;
-    private boolean continuous;
-    private boolean isBufferReady;
     private boolean isReadyData;
 
     public MicArray(Wishbone wb) {
@@ -72,14 +57,7 @@ public class MicArray extends SensorBase {
             micarray.add(mic6);
             micarray.add(mic7);
         }
-        buffer=ByteBuffer.allocateDirect(2048);
         configMicDataInterrupt();
-    }
-
-
-    public interface OnMicArrayListener{
-        void onCapture(int mic, ArrayDeque<Short> mic_data);
-        void onCaptureAll(ArrayList<ArrayDeque> mic_array);
     }
 
     private void configMicDataInterrupt(){
@@ -130,20 +108,13 @@ public class MicArray extends SensorBase {
             Log.d(TAG, "[MIC] byteBuffer bytes read: "+(newpos-oldpos));
             return newpos - oldpos;
         }
-//        String data = "";
-//        for (int x=0;x<byteBuffer.capacity();x++){
-//            data=data+byteBuffer.get(x);
-//        }
-//        Log.d(TAG, "[MIC] byteBuffer data: "+data);
         return 0;
-
     }
 
     private void appendData(){
         isReadyData=false;
         for (int i=0;i<128;i++){
-//            Log.d(TAG,"position: "+buffer.position());
-//            buffer.putShort(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
+            // TODO: implement all mics (see possible memory leak)
             mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic1.add(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic2.add(ByteBuffer.wrap(data,(i*8+2)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
@@ -155,7 +126,5 @@ public class MicArray extends SensorBase {
         }
         isReadyData=true;
     }
-
-
 
 }

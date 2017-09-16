@@ -92,7 +92,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static AudioInConfig.Encoding ENCODING_INPUT = AudioInConfig.Encoding.LINEAR16;
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
 
-    ArrayDeque<Byte> mic0 = new ArrayDeque<>();
+    public static final int SAMPLE_BLOCK_SIZE = 128;
 
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
@@ -112,7 +112,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     .setEncoding(ENCODING)
                     .setSampleRate(SAMPLE_RATE)
                     .build();
-    public static final int SAMPLE_BLOCK_SIZE = 128;
 
     // Google Assistant API constants.
     private static final String ASSISTANT_ENDPOINT = "embeddedassistant.googleapis.com";
@@ -235,27 +234,17 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
+
     private Runnable mStreamAssistantRequest = new Runnable() {
         @Override
         public void run() {
-//            Log.d(TAG, "mStreamAssistantRequest");
             ByteBuffer audioData = ByteBuffer.allocateDirect(SAMPLE_BLOCK_SIZE);
             int result =
                     mAudioRecord.read(audioData, audioData.capacity(), AudioRecord.READ_BLOCKING);
             if (result < 0) {
                 Log.e(TAG, "error reading from audio stream:" + result);
                 return;
-            }else{
-//                Log.d(TAG, "result:" + result);
             }
-//            Log.d(TAG, "streaming ConverseRequest: " + result);
-//            String data = "";
-            for (int x = 0; x < audioData.capacity(); x++) {
-//                data = data+ "," + audioData.get(x);
-                mic0.add(audioData.get(x));
-            }
-//            Log.d(TAG, "[MIC] audioData data: " + data);
-
             mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
                     .build());
@@ -375,8 +364,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         } catch (IOException|JSONException e) {
             Log.e(TAG, "error creating assistant service:", e);
         }
+        // TODO: implement wakeword like Kitt.ai or sensory
         mButtonEmulateHandler.post(mButtonEmulateRunnable);
-//        mAssistantHandler.post(mStartAssistantRequest);
     }
 
     @Override
@@ -477,11 +466,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     }
 
     private void initDevices(PeripheralManagerService service) {
-//        pressure = new Pressure(wb);
-//        humidity = new Humidity(wb);
-//        imuSensor = new IMU(wb);
-//        uvSensor = new UV(wb);
-
         // TODO: autodetection of hat via SPI register
         everloop = new Everloop(wb); // NOTE: please change to right board
         everloop.clear();
@@ -492,9 +476,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         }
 
         micArray = new MicArray(wb);
-//        int samples = 2;
-//        if(ENABLE_MICARRAY_RECORD) samples=1024;
-//        micArray.capture(7, samples, ENABLE_CONTINOUNS_CAPTURE, onMicArrayListener);
         mMicArrayDriver = new MicArrayDriver(micArray);
         mMicArrayDriver.registerAudioInputDriver();
     }
@@ -518,48 +499,4 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
         }
     };
-
-    private class sendData extends AsyncTask<Void,Void,Void> {
-        @Override
-        protected Void doInBackground(Void... voids) {
-            writeViaSocket();
-            return null;
-        }
-    }
-
-    private void writeViaSocket(){
-        Log.i(TAG, "[MIC] write via socket..");
-        Socket socket = null;
-        DataOutputStream dataOutputStream = null;
-        DataInputStream dataInputStream = null;
-
-        try {
-            socket = new Socket("10.0.0.140", 2999);
-            dataOutputStream = new DataOutputStream(socket.getOutputStream());
-            dataInputStream = new DataInputStream(socket.getInputStream());
-            for (Byte aMic0 : mic0) dataOutputStream.writeByte(aMic0);
-        } catch (IOException e) {
-            Log.e(TAG, "[MIC] sending mic data error! "+e.getMessage());
-            e.printStackTrace();
-        }
-        finally{
-            if (socket != null){
-                try { socket.close(); } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-            if (dataOutputStream != null){
-                try { dataOutputStream.close(); } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-            if (dataInputStream != null){
-                try { dataInputStream.close(); } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-
 }
