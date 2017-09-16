@@ -30,7 +30,7 @@ public class MicArrayDriver implements AutoCloseable {
     private static final int BUFFER_SIZE = 96000 / 20;
     // buffer of 0.5 sec of sample data at 48khz / 16bit.
     private static final int FLUSH_SIZE = 48000;
-    private static final int BUFFER_MATRIX = 640;
+    private static final int BUFFER_MATRIX = 256;
     private static final int SAMPLE_BLOCK_SIZE = 128;
 
     private MicArray micArray;
@@ -77,7 +77,6 @@ public class MicArrayDriver implements AutoCloseable {
         @Override
         public int read(ByteBuffer byteBuffer, int i) {
             try {
-//                return mDevice.read(byteBuffer, i);
                 return micArray.read(byteBuffer, i);
             } catch (IOException e) {
                 Log.e(TAG, "[MIC] error during read operation:", e);
