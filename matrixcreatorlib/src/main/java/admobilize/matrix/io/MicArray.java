@@ -36,6 +36,7 @@ public class MicArray extends SensorBase {
     private ArrayList<ArrayDeque> micarray=new ArrayList<>();
     private Gpio gpio;
     private boolean isReadyData;
+    private boolean stopService;
 
     public MicArray(Wishbone wb) {
         super(wb);
@@ -78,7 +79,7 @@ public class MicArray extends SensorBase {
     private GpioCallback onMicDataCallback = new GpioCallback() {
         @Override
         public boolean onGpioEdge(Gpio gpio) {
-            read();
+            readFromDevice();
             return super.onGpioEdge(gpio);
         }
         @Override
@@ -88,18 +89,18 @@ public class MicArray extends SensorBase {
         }
     };
 
-    private void read(){
-        if(inRead==false) {
+    private void readFromDevice(){
+        if(inRead==false&&!stopService) {
             inRead = true;
             wb.SpiReadBurst((short) kMicrophoneArrayBaseAddress, data, 128 * 8 * 2);
             appendData();
             inRead = false;
-        }else
-            Log.w(TAG,"[MIC] skip read data!");
+        }else if(!stopService)
+            Log.w(TAG,"[MIC] skip readFromDevice data!");
     }
 
-    public int read(ByteBuffer byteBuffer, int i) throws IOException {
-        if(isReadyData) {
+    public int readFromDevice(ByteBuffer byteBuffer, int i) throws IOException {
+        if(isReadyData&&!stopService) {
             int oldpos = byteBuffer.position();
             for (int x = 0; x < (i / 2); x++) {
                 byteBuffer.putShort(mic0.poll());
@@ -127,4 +128,8 @@ public class MicArray extends SensorBase {
         isReadyData=true;
     }
 
+    public void stop(){
+        stopService=true;
+        for (ArrayDeque aMicarray : micarray) aMicarray.clear();
+    }
 }
