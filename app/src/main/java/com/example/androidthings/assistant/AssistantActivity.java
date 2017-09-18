@@ -249,7 +249,10 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mAssistantRequestObserver = null;
             }
             mAudioRecord.stop();
+            micArray.stop();
             mAudioTrack.play();
+            everloop.clear();
+            everloop.write();
 //            new sendData().execute();
         }
     };
