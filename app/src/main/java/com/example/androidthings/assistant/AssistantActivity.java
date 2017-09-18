@@ -400,14 +400,24 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mVoiceHat.unregisterAudioOutputDriver();
                 mVoiceHat.unregisterAudioInputDriver();
                 mVoiceHat.close();
-                matrix.unregisterAudioInputDriver();
-                matrix.close();
             } catch (IOException e) {
                 Log.w(TAG, "error closing voice hat driver", e);
             } catch (Exception e) {
                 e.printStackTrace();
             }
             mVoiceHat = null;
+        }
+        if (matrix != null){
+            try {
+                matrix.micArray.stop();
+                matrix.unregisterAudioInputDriver();
+                matrix.close();
+            } catch (IOException e) {
+                Log.w(TAG, "error closing MATRIX hat driver", e);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            matrix = null;
         }
         mAssistantHandler.post(new Runnable() {
             @Override
@@ -417,8 +427,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         });
         mAssistantThread.quitSafely();
     }
-
-
 
     private boolean BUTTON_TOOGLE;
     private boolean pressed;
