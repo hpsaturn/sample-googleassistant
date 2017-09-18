@@ -4,44 +4,38 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.util.Log;
 
+import com.google.android.things.pio.PeripheralManagerService;
+import com.google.android.things.pio.SpiDevice;
 import com.google.android.things.userdriver.AudioInputDriver;
 import com.google.android.things.userdriver.UserDriverManager;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 
 
 /**
  * Created by Antonio Vanegas @hpsaturn on 9/9/17.
  */
 
-public class MicArrayDriver implements AutoCloseable {
+public class MatrixDriver implements AutoCloseable {
 
-    private static final String TAG = MicArrayDriver.class.getSimpleName();
+    private static final String TAG = MatrixDriver.class.getSimpleName();
+
     private static final boolean DEBUG = Config.DEBUG;
-
-    // buffer of 0.05 sec of sample data at 48khz / 16bit.
-    private static final int BUFFER_SIZE = 96000 / 20;
-    // buffer of 0.5 sec of sample data at 48khz / 16bit.
-    private static final int FLUSH_SIZE = 48000;
     private static final int BUFFER_MATRIX = 256;
-    private static final int SAMPLE_BLOCK_SIZE = 128;
 
-    private MicArray micArray;
     private AudioInputUserDriver mAudioInputDriver;
 
     // Audio constants.
-    private static final String PREF_CURRENT_VOLUME = "current_volume";
     private static final int SAMPLE_RATE = 16000;
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
-    private static final int DEFAULT_VOLUME = 100;
 
-    private static final AudioFormat AUDIO_FORMAT_STEREO =
-            new AudioFormat.Builder()
-                    .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
-                    .setEncoding(ENCODING)
-                    .setSampleRate(SAMPLE_RATE)
-                    .build();
+    private SpiDevice spiDevice;
+    private Wishbone wb;
+    public Everloop everloop;
+    public MicArray micArray;
+
 
     private static final AudioFormat AUDIO_FORMAT_IN_MONO =
             new AudioFormat.Builder()
@@ -50,8 +44,47 @@ public class MicArrayDriver implements AutoCloseable {
                     .setSampleRate(SAMPLE_RATE)
                     .build();
 
-    public MicArrayDriver(MicArray micArray) {
-        this.micArray=micArray;
+    public MatrixDriver(){
+        PeripheralManagerService service = new PeripheralManagerService();
+        while(!configSPI(service)){
+            Log.i(TAG, "waiting for SPI..");
+        }
+        wb=new Wishbone(spiDevice);
+        initDevices(service);
+    }
+
+    private boolean configSPI(PeripheralManagerService service){
+        try {
+            List<String> deviceList = service.getSpiBusList();
+            if (deviceList.isEmpty()) {
+                Log.i(TAG, "No SPI bus available");
+            } else {
+                Log.i(TAG, "List of available devices: " + deviceList);
+                spiDevice = service.openSpiDevice(BoardDefaults.getSpiBus());
+                spiDevice.setMode(SpiDevice.MODE3);
+                spiDevice.setFrequency(18000000);     // 18MHz
+                spiDevice.setBitsPerWord(8);          // 8 BP
+                spiDevice.setBitJustification(false); // MSB first
+                return true;
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error on PeripheralIO API (SPI)..");
+        }
+
+        return false;
+    }
+
+    private void initDevices(PeripheralManagerService service) {
+        // TODO: autodetection of hat via SPI register
+        everloop = new Everloop(wb); // NOTE: please change to right board
+        everloop.clear();
+
+        for(int i=0;i<everloop.getLedCount();i=i+5) {  // animation
+            everloop.drawProgress(i);
+            everloop.write();
+        }
+
+        micArray = new MicArray(wb);
     }
 
     @Override
@@ -60,6 +93,7 @@ public class MicArrayDriver implements AutoCloseable {
     }
 
     private class AudioInputUserDriver extends AudioInputDriver {
+
         @Override
         public void onStandbyChanged(boolean b) {
         }

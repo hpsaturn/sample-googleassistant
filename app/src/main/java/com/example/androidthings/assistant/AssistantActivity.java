@@ -36,7 +36,6 @@ import com.google.android.things.contrib.driver.button.Button;
 import com.google.android.things.contrib.voicehat.VoiceHatDriver;
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.PeripheralManagerService;
-import com.google.android.things.pio.SpiDevice;
 import com.google.assistant.embedded.v1alpha1.AudioInConfig;
 import com.google.assistant.embedded.v1alpha1.AudioOutConfig;
 import com.google.assistant.embedded.v1alpha1.ConverseConfig;
@@ -53,10 +52,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-import admobilize.matrix.io.Everloop;
-import admobilize.matrix.io.MicArray;
-import admobilize.matrix.io.MicArrayDriver;
-import admobilize.matrix.io.Wishbone;
+import admobilize.matrix.io.MatrixDriver;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
@@ -249,11 +245,10 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mAssistantRequestObserver = null;
             }
             mAudioRecord.stop();
-            micArray.stop();
+            matrix.micArray.stop();
             mAudioTrack.play();
-            everloop.clear();
-            everloop.write();
-//            new sendData().execute();
+            matrix.everloop.clear();
+            matrix.everloop.write();
         }
     };
     private Handler mMainHandler;
@@ -261,11 +256,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // List & adapter to store and display the history of Assistant Requests.
     private ArrayList<String> mAssistantRequests = new ArrayList<>();
     private ArrayAdapter<String> mAssistantRequestsAdapter;
-    private SpiDevice spiDevice;
-    private Wishbone wb;
-    private Everloop everloop;
-    private MicArray micArray;
-    private MicArrayDriver mMicArrayDriver;
+    private MatrixDriver matrix;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -304,7 +295,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 }
             }
             if (AUDIO_USE_MATRIX_CREATOR_IF_AVAILABLE){
-                initMatrixCreatorDevices();
+                matrix = new MatrixDriver();
+                matrix.registerAudioInputDriver();
             }
             mButton = new Button(BoardDefaults.getGPIOForButton(), Button.LogicState.PRESSED_WHEN_LOW);
             mButton.setDebounceDelay(BUTTON_DEBOUNCE_DELAY_MS);
@@ -408,8 +400,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 mVoiceHat.unregisterAudioOutputDriver();
                 mVoiceHat.unregisterAudioInputDriver();
                 mVoiceHat.close();
-                mMicArrayDriver.unregisterAudioInputDriver();
-                mMicArrayDriver.close();
+                matrix.unregisterAudioInputDriver();
+                matrix.close();
             } catch (IOException e) {
                 Log.w(TAG, "error closing voice hat driver", e);
             } catch (Exception e) {
@@ -426,50 +418,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         mAssistantThread.quitSafely();
     }
 
-    private void initMatrixCreatorDevices(){
-        PeripheralManagerService service = new PeripheralManagerService();
-        while(!configSPI(service)){
-            Log.i(TAG, "waiting for SPI..");
-        }
-        wb=new Wishbone(spiDevice);
-        initDevices(service);
-    }
 
-    private boolean configSPI(PeripheralManagerService service){
-        try {
-            List<String> deviceList = service.getSpiBusList();
-            if (deviceList.isEmpty()) {
-                Log.i(TAG, "No SPI bus available");
-            } else {
-                Log.i(TAG, "List of available devices: " + deviceList);
-                spiDevice = service.openSpiDevice(BoardDefaults.getSpiBus());
-                spiDevice.setMode(SpiDevice.MODE3);
-                spiDevice.setFrequency(18000000);     // 18MHz
-                spiDevice.setBitsPerWord(8);          // 8 BP
-                spiDevice.setBitJustification(false); // MSB first
-                return true;
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Error on PeripheralIO API (SPI)..");
-        }
-
-        return false;
-    }
-
-    private void initDevices(PeripheralManagerService service) {
-        // TODO: autodetection of hat via SPI register
-        everloop = new Everloop(wb); // NOTE: please change to right board
-        everloop.clear();
-
-        for(int i=0;i<everloop.getLedCount();i=i+2) {
-            everloop.drawProgress(i);
-            everloop.write();
-        }
-
-        micArray = new MicArray(wb);
-        mMicArrayDriver = new MicArrayDriver(micArray);
-        mMicArrayDriver.registerAudioInputDriver();
-    }
 
     private boolean BUTTON_TOOGLE;
     private boolean pressed;
