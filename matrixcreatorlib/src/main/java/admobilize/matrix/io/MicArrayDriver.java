@@ -2,14 +2,8 @@ package admobilize.matrix.io;
 
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.media.MediaRecorder;
-import android.os.Handler;
-import android.os.HandlerThread;
 import android.util.Log;
 
-import com.google.android.things.pio.Gpio;
-import com.google.android.things.pio.I2sDevice;
 import com.google.android.things.userdriver.AudioInputDriver;
 import com.google.android.things.userdriver.UserDriverManager;
 
@@ -73,9 +67,9 @@ public class MicArrayDriver implements AutoCloseable {
         @Override
         public int read(ByteBuffer byteBuffer, int i) {
             try {
-                return micArray.read(byteBuffer, i);
+                return micArray.readFromDevice(byteBuffer, i);
             } catch (IOException e) {
-                Log.e(TAG, "[MIC] error during read operation:", e);
+                Log.e(TAG, "[MIC] error during readFromDevice operation:", e);
                 return -1;
             }
         }
