@@ -49,6 +49,7 @@ import org.json.JSONException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,6 +61,9 @@ import io.grpc.auth.MoreCallCredentials;
 import io.grpc.stub.StreamObserver;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
+
+    static { System.loadLibrary("snowboy-detect-android"); }
+
     private static final String TAG = AssistantActivity.class.getSimpleName();
 
     // Peripheral and drivers constants.
@@ -232,9 +236,29 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 return;
             }
             Log.d(TAG, "streaming ConverseRequest: " + result);
-            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
-                    .setAudioIn(ByteString.copyFrom(audioData))
-                    .build());
+            // Converts to short array.
+            short[] audioDataSnowboy = new short[audioData.position() / 2];
+            ByteBuffer.wrap(audioData.array()).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioDataSnowboy);
+
+
+            // Snowboy hotword detection.
+            result = snowboyDetector.RunDetection(audioDataSnowboy, audioDataSnowboy.length);
+
+            if (result == -2) {
+                // post a higher CPU usage:
+                // sendMessage(MsgEnum.MSG_VAD_NOSPEECH, null);
+            } else if (result == -1) {
+                Log.e(TAG, "Unknown Detection Error");
+            } else if (result == 0) {
+                // post a higher CPU usage:
+                // sendMessage(MsgEnum.MSG_VAD_SPEECH, null);
+            } else if (result > 0) {
+                Log.i("Snowboy: ", "Hotword " + Integer.toString(result) + " detected!");
+}
+
+//            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
+//                    .setAudioIn(ByteString.copyFrom(audioData))
+//                    .build());
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
@@ -357,8 +381,8 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         snowboyDetector.SetSensitivity("0.45");         // Sensitivity for each hotword
         snowboyDetector.SetAudioGain(2.0f);              // Audio gain for detection
 
+        mAssistantHandler.post(mStartAssistantRequest);
 
-//        int result = snowboyDetector.RunDetection(buffer, buffer.length);   // buffer is a short array.
 
     }
 
