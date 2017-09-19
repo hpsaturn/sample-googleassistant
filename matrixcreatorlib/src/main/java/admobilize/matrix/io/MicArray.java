@@ -114,7 +114,7 @@ public class MicArray extends SensorBase {
 
     private void appendData(){
         isReadyData=false;
-        for (int i=0;i<128;i++){
+        for (int i=0;i<128;i++){ // 8 mics are joined on data
             // TODO: implement all mics (see possible memory leak)
             mic0.add(ByteBuffer.wrap(data,(i*8+0)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
 //            mic1.add(ByteBuffer.wrap(data,(i*8+1)*2,2).order(ByteOrder.BIG_ENDIAN).getShort());
