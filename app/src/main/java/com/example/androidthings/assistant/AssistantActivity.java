@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import admobilize.matrix.io.MatrixDriver;
+import ai.kitt.snowboy.SnowboyDetect;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
@@ -184,6 +185,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private VoiceHatDriver mVoiceHat;
     private Button mButton;
     private Gpio mLed;
+    private MatrixDriver matrix;
 
     // Assistant Thread and Runnables implementing the push-to-talk functionality.
     private ByteString mConversationState = null;
@@ -229,6 +231,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 Log.e(TAG, "error reading from audio stream:" + result);
                 return;
             }
+            Log.d(TAG, "streaming ConverseRequest: " + result);
             mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
                     .setAudioIn(ByteString.copyFrom(audioData))
                     .build());
@@ -256,7 +259,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // List & adapter to store and display the history of Assistant Requests.
     private ArrayList<String> mAssistantRequests = new ArrayList<>();
     private ArrayAdapter<String> mAssistantRequestsAdapter;
-    private MatrixDriver matrix;
+    private SnowboyDetect snowboyDetector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -348,7 +351,15 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             Log.e(TAG, "error creating assistant service:", e);
         }
         // TODO: implement wakeword like Kitt.ai or sensory
-        mButtonEmulateHandler.post(mButtonEmulateRunnable);
+        //mButtonEmulateHandler.post(mButtonEmulateRunnable);
+
+        snowboyDetector = new SnowboyDetect("/sdcard/snowboy/common.res", "/sdcard/snowboy/snowboy.umdl");
+        snowboyDetector.SetSensitivity("0.45");         // Sensitivity for each hotword
+        snowboyDetector.SetAudioGain(2.0f);              // Audio gain for detection
+
+
+//        int result = snowboyDetector.RunDetection(buffer, buffer.length);   // buffer is a short array.
+
     }
 
     @Override

@@ -32,7 +32,6 @@ public class MatrixDriver implements AutoCloseable {
     private static final int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
     private SpiDevice spiDevice;
-    private Wishbone wb;
     public Everloop everloop;
     public MicArray micArray;
 
@@ -44,13 +43,10 @@ public class MatrixDriver implements AutoCloseable {
                     .setSampleRate(SAMPLE_RATE)
                     .build();
 
-    public MatrixDriver(){
+    public MatrixDriver() {
         PeripheralManagerService service = new PeripheralManagerService();
-        while(!configSPI(service)){
-            Log.i(TAG, "waiting for SPI..");
-        }
-        wb=new Wishbone(spiDevice);
-        initDevices(service);
+        while (!configSPI(service)) Log.i(TAG, "waiting for SPI..");
+        initDevices();
     }
 
     private boolean configSPI(PeripheralManagerService service){
@@ -74,15 +70,12 @@ public class MatrixDriver implements AutoCloseable {
         return false;
     }
 
-    private void initDevices(PeripheralManagerService service) {
+    private void initDevices() {
         // TODO: autodetection of hat via SPI register
-        everloop = new Everloop(wb); // NOTE: please change to right board
-        everloop.clear();
-
-        for(int i=0;i<everloop.getLedCount();i=i+5) {  // animation
-            everloop.drawProgress(i);
-            everloop.write();
-        }
+        Wishbone wb = new Wishbone(spiDevice);
+        everloop = new Everloop(wb); // NOTE: please change to right board on Config class
+        everloop.drawProgress(34);
+        everloop.write();
 
         micArray = new MicArray(wb);
     }
