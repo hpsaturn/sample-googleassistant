@@ -74,9 +74,6 @@ public class MatrixDriver implements AutoCloseable {
         // TODO: autodetection of hat via SPI register
         Wishbone wb = new Wishbone(spiDevice);
         everloop = new Everloop(wb); // NOTE: please change to right board on Config class
-        everloop.drawProgress(34);
-        everloop.write();
-
         micArray = new MicArray(wb);
     }
 

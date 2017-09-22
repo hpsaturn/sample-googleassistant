@@ -54,11 +54,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import admobilize.matrix.io.MatrixDriver;
+import ai.kitt.snowboy.AppResCopy;
+import ai.kitt.snowboy.Constants;
 import ai.kitt.snowboy.SnowboyDetect;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.stub.StreamObserver;
+
+import static ai.kitt.snowboy.Constants.ACTIVE_RES;
+import static ai.kitt.snowboy.Constants.ACTIVE_UMDL;
 
 public class AssistantActivity extends Activity implements Button.OnButtonEventListener {
 
@@ -82,6 +87,13 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     private static AudioOutConfig.Encoding ENCODING_OUTPUT = AudioOutConfig.Encoding.LINEAR16;
 
     public static final int SAMPLE_BLOCK_SIZE = 1024;
+
+    // Snowboy wakeword
+    private int preVolume = -1;
+    private static String strEnvWorkSpace = Constants.DEFAULT_WORK_SPACE;
+    private String activeModel = strEnvWorkSpace+ACTIVE_UMDL;
+    private String commonRes = strEnvWorkSpace+ACTIVE_RES;
+    private SnowboyDetect detector;
 
     private static final AudioFormat AUDIO_FORMAT_STEREO =
             new AudioFormat.Builder()
@@ -132,6 +144,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                     }
                     if (!spokenRequestText.isEmpty()) {
                         Log.i(TAG, "assistant request text: " + spokenRequestText);
+                        mAssistantHandler.post(mStopAssistantRequest);
                         mMainHandler.post(new Runnable() {
                             @Override
                             public void run() {
@@ -167,6 +180,7 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         @Override
         public void onCompleted() {
             Log.i(TAG, "assistant response finished");
+//            mAssistantHandler.post(mStopAssistantRequest);
             if (mLed != null) {
                 try {
                     mLed.setValue(false);
@@ -199,19 +213,18 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
         @Override
         public void run() {
             Log.i(TAG, "starting assistant request");
-            mAudioRecord.startRecording();
             mAssistantRequestObserver = mAssistantService.converse(mAssistantResponseObserver);
-            ConverseConfig.Builder converseConfigBuilder =
-                    ConverseConfig.newBuilder()
-                            .setAudioInConfig(AudioInConfig.newBuilder()
-                                    .setEncoding(ENCODING_INPUT)
-                                    .setSampleRateHertz(SAMPLE_RATE)
-                                    .build())
-                            .setAudioOutConfig(AudioOutConfig.newBuilder()
-                                    .setEncoding(ENCODING_OUTPUT)
-                                    .setSampleRateHertz(SAMPLE_RATE)
-                                    .setVolumePercentage(mVolumePercentage)
-                                    .build());
+                ConverseConfig.Builder converseConfigBuilder =
+                        ConverseConfig.newBuilder()
+                                .setAudioInConfig(AudioInConfig.newBuilder()
+                                        .setEncoding(ENCODING_INPUT)
+                                        .setSampleRateHertz(SAMPLE_RATE)
+                                        .build())
+                                .setAudioOutConfig(AudioOutConfig.newBuilder()
+                                        .setEncoding(ENCODING_OUTPUT)
+                                        .setSampleRateHertz(SAMPLE_RATE)
+                                        .setVolumePercentage(mVolumePercentage)
+                                        .build());
             if (mConversationState != null) {
                 converseConfigBuilder.setConverseState(
                         ConverseState.newBuilder()
@@ -235,33 +248,14 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
                 Log.e(TAG, "error reading from audio stream:" + result);
                 return;
             }
-            Log.d(TAG, "streaming ConverseRequest: " + result);
-            // Converts to short array.
-            short[] audioDataSnowboy = new short[audioData.position() / 2];
-            ByteBuffer.wrap(audioData.array()).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioDataSnowboy);
-
-
-            // Snowboy hotword detection.
-            result = snowboyDetector.RunDetection(audioDataSnowboy, audioDataSnowboy.length);
-
-            if (result == -2) {
-                // post a higher CPU usage:
-                // sendMessage(MsgEnum.MSG_VAD_NOSPEECH, null);
-            } else if (result == -1) {
-                Log.e(TAG, "Unknown Detection Error");
-            } else if (result == 0) {
-                // post a higher CPU usage:
-                // sendMessage(MsgEnum.MSG_VAD_SPEECH, null);
-            } else if (result > 0) {
-                Log.i("Snowboy: ", "Hotword " + Integer.toString(result) + " detected!");
-}
-
-//            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
-//                    .setAudioIn(ByteString.copyFrom(audioData))
-//                    .build());
+//            Log.d(TAG, "streaming ConverseRequest: " + result);
+            mAssistantRequestObserver.onNext(ConverseRequest.newBuilder()
+                    .setAudioIn(ByteString.copyFrom(audioData))
+                    .build());
             mAssistantHandler.post(mStreamAssistantRequest);
         }
     };
+
     private Runnable mStopAssistantRequest = new Runnable() {
         @Override
         public void run() {
@@ -274,8 +268,11 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             mAudioRecord.stop();
             matrix.micArray.stop();
             mAudioTrack.play();
-            matrix.everloop.clear();
+            matrix.everloop.drawProgress(34);
             matrix.everloop.write();
+            matrix.micArray.resume();
+            mAudioRecord.startRecording();
+            mAssistantHandler.post(mSnowboyDetectRequest);
         }
     };
     private Handler mMainHandler;
@@ -283,7 +280,6 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
     // List & adapter to store and display the history of Assistant Requests.
     private ArrayList<String> mAssistantRequests = new ArrayList<>();
     private ArrayAdapter<String> mAssistantRequestsAdapter;
-    private SnowboyDetect snowboyDetector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -292,6 +288,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
 
         setContentView(R.layout.activity_main);
         ListView assistantRequestsListView = (ListView)findViewById(R.id.assistantRequestsListView);
+
+        AppResCopy.copyResFromAssetsToSD(this);
+
         mAssistantRequestsAdapter =
                 new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1,
                         mAssistantRequests);
@@ -375,14 +374,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             Log.e(TAG, "error creating assistant service:", e);
         }
         // TODO: implement wakeword like Kitt.ai or sensory
-        //mButtonEmulateHandler.post(mButtonEmulateRunnable);
-
-        snowboyDetector = new SnowboyDetect("/sdcard/snowboy/common.res", "/sdcard/snowboy/snowboy.umdl");
-        snowboyDetector.SetSensitivity("0.45");         // Sensitivity for each hotword
-        snowboyDetector.SetAudioGain(2.0f);              // Audio gain for detection
-
-        mAssistantHandler.post(mStartAssistantRequest);
-
+//        mButtonEmulateHandler.post(mButtonEmulateRunnable);
+//        mAssistantHandler.post(mStartAssistantRequest);
+        mAssistantHandler.post(mSnowboyInsance);
 
     }
 
@@ -479,6 +473,68 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             }
             BUTTON_TOOGLE=!BUTTON_TOOGLE;
             mButtonEmulateHandler.postDelayed(mButtonEmulateRunnable,INTERVAL_BUTTON_PRESSED);
+        }
+    };
+
+    private void setProperVolume() {
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        preVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        Log.d(TAG," ----> preVolume = "+preVolume);
+        int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        Log.d(TAG," ----> maxVolume = "+maxVolume);
+        int properVolume = (int) ((float) maxVolume * 0.2);
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, properVolume, 0);
+        int currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        Log.d(TAG," ----> currentVolume = "+currentVolume);
+    }
+
+    private Runnable mSnowboyInsance = new Runnable() {
+        @Override
+        public void run() {
+            matrix.everloop.drawProgress(34);
+            matrix.everloop.write();
+            Log.w(TAG, "=== starting wakeword recognition ===");
+            Log.d(TAG, "commonRes:"+commonRes);
+            Log.d(TAG, "activeModel:"+activeModel);
+            detector = new SnowboyDetect(commonRes, activeModel);
+            detector.SetSensitivity("0.6");         // Sensitivity for each hotword
+            mAudioRecord.startRecording();
+            mAssistantHandler.post(mSnowboyDetectRequest);
+        }
+    };
+
+    byte[] audioBuffer = new byte[SAMPLE_BLOCK_SIZE];
+    long shortsRead = 0;
+    private Runnable mSnowboyDetectRequest = new Runnable() {
+
+        @Override
+        public void run() {
+            mAudioRecord.read(audioBuffer, 0, audioBuffer.length);
+            // Converts to short array.
+            short[] audioData = new short[audioBuffer.length / 2];
+            ByteBuffer.wrap(audioBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioData);
+
+            shortsRead += audioData.length;
+            // Snowboy hotword detection.
+            int result = detector.RunDetection(audioData, audioData.length);
+//            Log.e(TAG, "result: "+result);
+
+            if (result == -2) {
+                // post a higher CPU usage:
+                // sendMessage(MsgEnum.MSG_VAD_NOSPEECH, null);
+            } else if (result == -1) {
+                Log.e(TAG, "Unknown Detection Error");
+            } else if (result == 0) {
+                // post a higher CPU usage:
+                // sendMessage(MsgEnum.MSG_VAD_SPEECH, null);
+            } else if (result > 0) {
+                Log.w("== Snowboy: ", "Hotword " + Integer.toString(result) + " detected! ==");
+                matrix.everloop.clear();
+                matrix.everloop.write();
+                mAssistantHandler.post(mStartAssistantRequest);
+                return;
+            }
+            mAssistantHandler.post(mSnowboyDetectRequest);
         }
     };
 }
