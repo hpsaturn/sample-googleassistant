@@ -127,6 +127,9 @@ public class AssistantActivity extends Activity implements Button.OnButtonEventL
             switch (value.getConverseResponseCase()) {
                 case EVENT_TYPE:
                     Log.d(TAG, "converse response event: " + value.getEventType());
+                    if(value.getEventType()== ConverseResponse.EventType.END_OF_UTTERANCE){
+                        mAssistantHandler.post(mStopAssistantRequest);
+                    }
                     break;
                 case RESULT:
                     final String spokenRequestText = value.getResult().getSpokenRequestText();
